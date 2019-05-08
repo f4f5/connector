@@ -1,0 +1,10 @@
+{
+    "description": "level 1 means it'is server by blockchain, level 2 means it will it'is server by level 1.",
+    "level": 1, 
+    "level": 2, 
+    "current_global_level": 2,
+    "current_global_level_num": 1980,
+    
+    
+
+}
