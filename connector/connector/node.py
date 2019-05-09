@@ -34,7 +34,6 @@ class Node:
             self.pc = local.parse_pc_str(serverConfig.get('pc'))
             self.build_self_node()
 
-
     def build_self_node(self):
         self.node = {}
         pass
@@ -72,14 +71,15 @@ class Node:
         pingtime = []        
         for n in self.scores:
             pingtime.push(self.pingter.wrap_ping(n))
-        # return self.scores[self.scores.index(min(self.scores))]
-        
+        pingorg = pingtime.copy()
+        pingtime.sort()
+        best_ten=[]
+        for i in range(10):
+            if(i>=len(pingtime)): break
+            ind = pingorg.index(pingtime[i])
+            best_ten.push(self.scores[ind])
+
+        return best_ten
+
         
             
-        
-
-    
-
-def f(x):
-    return x**x
-        
