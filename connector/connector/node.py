@@ -20,6 +20,7 @@ class Node:
         self.scores = [] 
         self.load_config()
         self.pingter = new PyPing()
+        self.ismainnode = False
 
     def load_config(self):
         serverConfig = {}
@@ -81,5 +82,69 @@ class Node:
 
         return best_ten
 
+    def prepare_for_mainnode(self):
+        """
+        1. info all the other main node the preparation
+        2. set the main node relate info of this point.
+        3. set server prepare for node connction
+        """
+
+        pass
+
+    def main_node_res(self):
+        """RECEIVE INFO
+        response to all the main nodes relate info if this node is a main node, includes:
+            node update info 
+            main node update info
+
+
+        """
+        pass
+    
+    def node_res(self):
+        """RECEIVE INFO
+        """
+        pass
+    
+    def update_main_node(self):
+        """SEND INFO
+
+        exchange infomation from other main node.
+        """
+
+        pass
+
+    def update_node(self):
+        """SEND INFO
+
+        """
+        if self.ismainnode:
+            return self.update_main_node()
+
+        pass
+    
+    def periodic_do(self):
+        self.update_node()
+        self.check_child_heartbeat()
+
+        pass
+
+    def check_child_heartbeat(self):
+        if not ismainnode:
+            return
+
+        pass
+
+    def delete_main_node(self):
+
+        pass
+    def delete_node(self):
+        pass
+
+    def select_new_main_node(self):
+        """
+        1 if ismainnode, select the best node of its child and send info to all the other mainnode
         
+        """
+        pass
             
