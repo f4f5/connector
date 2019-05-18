@@ -1,5 +1,6 @@
 """
 node logic
+author: kdsjkjgaksdgjqawe@outlook.com
 """
 import requests
 from ping import PyPing
