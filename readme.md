@@ -113,32 +113,32 @@ remainconnections:{
         return efficients[index]    
 ```
 
-### Design
-Add  Delete  Update  Search
-Choose the best 100 point to be main point
+### 设计思想
+增  删   改   查
+选择100个资源最优的节点作为主节点
 
-Flows 0: 
-initialization, for the config file and the pc efficient data.
+流程 1: 
+初始化节点， 加载配置文件，获取本机的配置信息、网络宽带等信息，配置文件描述了服务器类型、服务器端口等等信息
 
 
-Flows 1:  Function  connect_2_network
-check for self node to fill some infomation  ...on going
-connect to the network to retrive mainnode   ... on going
-connect to mainnode to get more info
-prepare for mainnode if possible
+流程 2:  函数  connect_2_network
+检查自身，获取相关信息  ...on going
+连接上union网络，获取网络上的资源配置表   ... on going
+选择合适的主节点连接，进一步获取信息
+看看自己是否可以作为主节点
 
-Flows2:
-a node periodically upload itself to its mainnode
-if  mainnode block, change its mainnode and tell the new mainnode this block
+流程3:
+周期性的上传本节点信息到自己的主节点
+如果主节点阻塞， 更换自己的主节点，并且告诉新的主节点 老节点阻塞
 
-Flows3:
-a mainnode check for its child's heartbeat periodically. if block delete.
+流程4:
+主节点检查自己的子节点心跳，剔除不活跃的子节点，并向其它主节点同步剔除信息
 
-Flows4:
-mainnode exchange infomation if need
+流程5:
+主节点之间交互信息
 
-Flows5: 
-delete An old Mainnode and select a new one.
+流程6: 
+删除老的主节点，选择新的主节点
 
 ## 服务器
 当前的想法是弄一个VPN服务器，当然也可以弄个网站，一个内置的交易市场是需要的。GitHub的 f4f5 里已经上传的shadowsocks就是一个VPN服务器的源码。这个不是我写的，这个是网上开源的。
