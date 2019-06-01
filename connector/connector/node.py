@@ -89,6 +89,8 @@ class Node:
         2. set the main node relate info of this point.
         3. set server prepare for node connction
         """
+        self.ismainnode = True
+        
 
         pass
 
@@ -97,8 +99,6 @@ class Node:
         response to all the main nodes relate info if this node is a main node, includes:
             node update info 
             main node update info
-
-
         """
         pass
     
