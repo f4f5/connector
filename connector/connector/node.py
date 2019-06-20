@@ -43,8 +43,10 @@ class Node:
     def connect_2_network(self, url):
         """
         A node first connect to the network
+        节点首次接入网络
         Args:
             url:  The first connect node's url and port.
+            url： 接入点网址、端口
         Returns:
         """
         url = url + '/node_all_info'
@@ -67,7 +69,7 @@ class Node:
             self.prepare_for_mainnode()
             return
         
-    def choose_best_mainnode(self):
+    def choose_best_mainnode(self): #选择前100个综合性能最好的节点作为主节点
         if len(self.scores) < 100:
             return
         pingtime = []        
@@ -83,27 +85,36 @@ class Node:
 
         return best_ten
 
-    def prepare_for_mainnode(self):
+    def prepare_for_mainnode(self):  #准备成为主节点
         """
         1. info all the other main node the preparation
         2. set the main node relate info of this point.
         3. set server prepare for node connction
+        ————————
+        1. 通知其他节点该节点将成为主节点
+        2. 设置相关参数
+        3. 准备迎接主节点连接
         """
         self.ismainnode = True
         
 
         pass
 
-    def main_node_res(self):
+    def main_node_rec(self):
         """RECEIVE INFO
         response to all the main nodes relate info if this node is a main node, includes:
             node update info 
             main node update info
+        ——————————
+        若为主节点身份 接收连接信息（做出响应）
         """
         pass
     
-    def node_res(self):
+    def node_rec(self):
         """RECEIVE INFO
+
+        ——————————
+        若为子节点身份 接收信息（做出响应）
         """
         pass
     
@@ -111,6 +122,8 @@ class Node:
         """SEND INFO
 
         exchange infomation from other main node.
+        ——————————
+        若为主节点身份 对网络做出更新（发送更新信息）
         """
 
         pass
