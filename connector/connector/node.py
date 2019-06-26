@@ -90,6 +90,7 @@ class Node:
         1. info all the other main node the preparation
         2. set the main node relate info of this point.
         3. set server prepare for node connction
+
         ————————
         1. 通知其他节点该节点将成为主节点
         2. 设置相关参数
@@ -99,6 +100,13 @@ class Node:
         
 
         pass
+
+    def p_info_main_node(self):
+        pass
+    
+    def p_rec_main_node(select):
+        pass
+    
 
     def main_node_rec(self):
         """RECEIVE INFO
