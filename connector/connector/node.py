@@ -136,7 +136,8 @@ class Node:
         """
         data = await self.sever.read()
         resp = {
-
+            'get_all_basic': self.resp_basic,
+            'change_main_node': self.change_main_node,
         }
         pass
     
