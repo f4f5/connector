@@ -11,8 +11,8 @@ import speedtest
 import random
 import json
 import local
-from io import ClientStream
-from io import SeverStream
+from netio import ClientStream
+from netio import server
 
 class Node:
     def __init__(self):
@@ -20,19 +20,18 @@ class Node:
         self.locations = {}
         self.server_types = {}
         self.remain_connections = {}
-        self.scores = [] 
+        self.scores = []   #ips 
         self.load_config()
-        self.pingter = new PyPing()
+        self.pingter = PyPing()
         self.ismainnode = False
         self.client = ClientStream()
-        self.sever = SeverStream()
+        self.sever = SeverStream()        
 
     def load_config(self):
         serverConfig = {}
         with open('./config/server.json', encoding = 'utf8') as f:
             serverConfig = json.loads(f.read())
             self.server_type = serverConfig.get('server_type') 
-            self.port = serverConfig.get('port')
             self.ip = serverConfig.get('ip') 
             self.location = serverConfig.get('locations')            
             self.remain_connection = serverConfig.get('remain_connection')
@@ -47,10 +46,9 @@ class Node:
     async def connect_2_network(self, url):
         """
         A node first connect to the network
-        节点首次接入网络
+        
         Args:
-            url:  The first connect node's url and port.
-            url： 接入点网址、端口
+            url:  The first connect node's url and port.            
         Returns:
         """        
         try:
@@ -71,8 +69,19 @@ class Node:
             self.scores.push(self.ip)
             self.prepare_for_mainnode()
             return
+        else:
+            mainnode = self.choose_best_mainnode()
+            self.node['father'] = mainnode
+            self.resource_mains[self.ip] = self.node
+            
         
     def choose_best_mainnode(self): #选择前100个综合性能最好的节点作为主节点
+        """
+        choose the best ten ips to be the main node
+
+        Returns:
+            ip: string
+        """
         if len(self.scores) < 100:
             return
         pingtime = []        
@@ -86,7 +95,12 @@ class Node:
             ind = pingorg.index(pingtime[i])
             best_ten.push(self.scores[ind])
 
-        return best_ten
+        best = best_ten[0]
+        for ip in best_ten:
+            if(self.resource_mains[ip].remain_connections > self.resource_mains[best].remain_connections):
+                best = ip
+            
+        return best
 
     def prepare_for_mainnode(self):  #准备成为主节点
         """
@@ -112,16 +126,16 @@ class Node:
         ---------
         节点为主节点时的服务器，该函数有点像MVC模型里的控制器
         """
-        data = await self.sever.read()
+        data = await self.sever.reader.read()
         resp = {
-            'get_all_basic':   self.resp_basic,  #just response the basic info
-            'main_node_fail':  self.main_node_fail,    #just receive the info and do something
-            '_main_node_fail': self.main_node_fail_process,  #indicate the first main node to langch a main_node_fail info.
-            'node_fail':       self.node_fail,
-            '_node_fail':      self.node_fail_process 
-            # 'add_node':
-            # 'update_network':
-            # ''
+            'get_all_basic':        self.resp_basic,  #just response the basic info
+            'main_node_fail':       self.main_node_fail,    #just receive the info and do something
+            '_main_node_fail':      self.main_node_fail_process,  #indicate the first main node to langch a main_node_fail info.
+            'delete_node':          self.delete_node,
+            'add_node':             self.add_node,
+            'search_node':          self.search_node,
+            'update_node':          self.update_node,
+            'recieve_new_node':     self.recieve_new_node
         }
 
         pass
@@ -134,13 +148,25 @@ class Node:
         ---------
         节点为常规节点时的服务器，该函数有点像MVC模型里的控制器
         """
-        data = await self.sever.read()
+        data = await self.sever.reader.read()
         resp = {
-            'get_all_basic': self.resp_basic,
-            'change_main_node': self.change_main_node,
+            'get_all_basic':        self.resp_basic,
+            'change_main_node':     self.change_main_node,
+            'delete_node':          self.delete_node,
+            'add_node':             self.add_node,
+            'search_node':          self.search_node,
+            'update_node':          self.update_node
         }
         pass
     
+
+    async def notify(self, data, toips):
+        for ip in toips:            
+            self.client.handler(ip)
+            self.client.writer.write(data)
+            await self.client.close_writer()
+
+
     def update_main_node(self):
         """SEND INFO
 

@@ -10,10 +10,10 @@ resource_main:    //the main resource file
 {
     ip_x: {
         server_type: []
-        ports:[]
-        remainconnections: []
+        remainconnections: 
         score:
         location:
+        father:
     }    
 }
 locations:   //below structure help to search faster
