@@ -11,6 +11,8 @@ import speedtest
 import random
 import json
 import local
+from io import ClientStream
+from io import SeverStream
 
 class Node:
     def __init__(self):
@@ -22,6 +24,8 @@ class Node:
         self.load_config()
         self.pingter = new PyPing()
         self.ismainnode = False
+        self.client = ClientStream()
+        self.sever = SeverStream()
 
     def load_config(self):
         serverConfig = {}
@@ -40,7 +44,7 @@ class Node:
         self.node = {}
         pass
 
-    def connect_2_network(self, url):
+    async def connect_2_network(self, url):
         """
         A node first connect to the network
         节点首次接入网络
@@ -48,11 +52,10 @@ class Node:
             url:  The first connect node's url and port.
             url： 接入点网址、端口
         Returns:
-        """
-        url = url + '/node_all_info'
+        """        
         try:
-            res = requests.post(url)
-            js = res.json()
+            await client.handler(url)
+            js = await client.requests({'op':'get_all_basic'})
             pass
         except Exception as e:
             print("connect to network exception!")
@@ -97,33 +100,44 @@ class Node:
         3. 准备迎接主节点连接
         """
         self.ismainnode = True
-        
+                
 
         pass
 
-    def p_info_main_node(self):
-        pass
-    
-    def p_rec_main_node(select):
-        pass
-    
-
-    def main_node_rec(self):
-        """RECEIVE INFO
-        response to all the main nodes relate info if this node is a main node, includes:
-            node update info 
-            main node update info
-        ——————————
-        若为主节点身份 接收连接信息（做出响应）
+    async def main_node_server(self):
         """
+        Server as a main node to receive and process message. This function can be thought
+        to be controller in MVC moudel. 
+
+        ---------
+        节点为主节点时的服务器，该函数有点像MVC模型里的控制器
+        """
+        data = await self.sever.read()
+        resp = {
+            'get_all_basic':   self.resp_basic,  #just response the basic info
+            'main_node_fail':  self.main_node_fail,    #just receive the info and do something
+            '_main_node_fail': self.main_node_fail_process,  #indicate the first main node to langch a main_node_fail info.
+            'node_fail':       self.node_fail,
+            '_node_fail':      self.node_fail_process 
+            # 'add_node':
+            # 'update_network':
+            # ''
+        }
+
         pass
     
-    def node_rec(self):
-        """RECEIVE INFO
-
-        ——————————
-        若为子节点身份 接收信息（做出响应）
+    async def node_server(self):
         """
+        Server as a normal node to receive and process message. This function can be thought 
+        to be controller in MVC moudel.
+
+        ---------
+        节点为常规节点时的服务器，该函数有点像MVC模型里的控制器
+        """
+        data = await self.sever.read()
+        resp = {
+
+        }
         pass
     
     def update_main_node(self):
