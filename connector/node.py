@@ -2,9 +2,9 @@
 node logic
 author: kdsjkjgaksdgjqawe@outlook.com
 """
-import requests
 from ping import PyPing
 import psutil
+import util
 from multiprocessing import Pool
 import time
 import speedtest
@@ -25,7 +25,7 @@ class Node:
         self.pingter = PyPing()
         self.ismainnode = False
         self.client = ClientStream()
-        self.sever = SeverStream()        
+        self.sever = server       
 
     def load_config(self):
         serverConfig = {}
@@ -52,27 +52,43 @@ class Node:
         Returns:
         """        
         try:
-            await client.handler(url)
-            js = await client.requests({'op':'get_all_basic'})
+            js = await self.requests({'op':'get_main_node'}, url)
             pass
         except Exception as e:
             print("connect to network exception!")
             print(e)
             return
-        self.resource_mains = js.resource_mains
-        self.locations = js.locations
-        self.server_types = js.server_types
-        self.remain_connections = js.remain_connections
+
         self.scores = js.scores
 
-        if len(self.scores) < 100:
-            self.scores.push(self.ip)
-            self.prepare_for_mainnode()
+        if len(self.scores) < 100:            
+            rs = await self.req_resource_file(random.choice(self.scores))            
+            self.resource_mains = rs.resource_mains
+            self.locations = rs.locations
+            self.server_types = rs.server_types
+            self.remain_connections = rs.remain_connections
+            self.scores = rs.scores
+            self.ismainnode = True   # indicate the server will be main node server.
+            util.opush(self.scores,self.ip)
+            await self.notify({
+                    'op': 'new_main_node',
+                    'node': self.node
+                }, self.scores)
             return
         else:
             mainnode = self.choose_best_mainnode()
             self.node['father'] = mainnode
-            self.resource_mains[self.ip] = self.node
+            self.mainnode = mainnode
+            rs = await self.req_resource_file(mainnode)
+            self.resource_mains = rs.resource_mains
+            self.locations = rs.locations
+            self.server_types = rs.server_types
+            self.remain_connections = rs.remain_connections
+            self.scores = rs.scores
+            await self.notify({
+                    'op': 'new_node',
+                    'node': self.node
+                }, mainnode)
             
         
     def choose_best_mainnode(self): #选择前100个综合性能最好的节点作为主节点
@@ -101,22 +117,7 @@ class Node:
                 best = ip
             
         return best
-
-    def prepare_for_mainnode(self):  #准备成为主节点
-        """
-        1. info all the other main node the preparation
-        2. set the main node relate info of this point.
-        3. set server prepare for node connction
-
-        ————————
-        1. 通知其他节点该节点将成为主节点
-        2. 设置相关参数
-        3. 准备迎接主节点连接
-        """
-        self.ismainnode = True
-                
-
-        pass
+    
 
     async def main_node_server(self):
         """
@@ -128,8 +129,11 @@ class Node:
         """
         data = await self.sever.reader.read()
         resp = {
-            'get_all_basic':        self.resp_basic,  #just response the basic info
-            'main_node_fail':       self.main_node_fail,    #just receive the info and do something
+            'get_main_node':        self.resp_main_node,
+            'new_node':             self.resp_new_node,
+            'new_main_node':        self.resp_new_main_node,
+            'get_resource_file':    self.resp_resource_file,  #just response the resource file
+            'main_node_fail':       self.resp_main_node_fail,    #just receive the info and do something
             '_main_node_fail':      self.main_node_fail_process,  #indicate the first main node to langch a main_node_fail info.
             'delete_node':          self.delete_node,
             'add_node':             self.add_node,
@@ -137,8 +141,7 @@ class Node:
             'update_node':          self.update_node,
             'recieve_new_node':     self.recieve_new_node
         }
-
-        pass
+        pass    
     
     async def node_server(self):
         """
@@ -150,7 +153,7 @@ class Node:
         """
         data = await self.sever.reader.read()
         resp = {
-            'get_all_basic':        self.resp_basic,
+            'get_main_node':        self.get_main_node,
             'change_main_node':     self.change_main_node,
             'delete_node':          self.delete_node,
             'add_node':             self.add_node,
@@ -161,10 +164,84 @@ class Node:
     
 
     async def notify(self, data, toips):
-        for ip in toips:            
+        """
+        as a client connect to others' server to send info
+        """
+        if type(toips) is not type([]):
+            toips = [toips]
+        if type(data) is not type(''):
+            data = json.dumps(data)
+        for ip in toips:                        
             self.client.handler(ip)
             self.client.writer.write(data)
             await self.client.close_writer()
+
+    async def requests(self,data, url=None):
+        """
+        as a client request to a server
+
+        Return:
+            json data
+        """
+        if not url:
+            url = self.mainnode
+
+        self.client.handler(url)
+        if type(data) is not type(''):
+            data = json.dumps(data)
+        self.client.writer.write(data)
+        await self.client.writer.drain()
+        self.client.writer.write_eof()
+        data = await self.client.reader.read()
+        data = json.loads(data.decode()) 
+        await self.client.writer.close()
+        return data
+    
+    async def server(self, reader, writer):
+        """
+        as a server to handle request
+        """
+
+    async def send(self, data):         
+        """
+        as a server node to send info
+        """
+        addr = self.server.writer.get_extra_info('peername')
+        if type(data) is not type(''):
+            data = json.dumps(data)
+
+        print(f"Received {data!r} from {addr!r}")
+        print(f"Send: {data!r}")
+        self.server.writer.write(data)
+        await self.server.writer.drain()
+        self.server.writer.write_eof()        
+        print("Close the connection")
+        self.server.writer.close()
+
+
+    ########################################
+    async def req_resource_file(self,url=None):
+        data = {
+            'op': 'get_resource_file'
+        }
+        return await self.requests(data, url)
+
+    async def resp_main_node(self):
+        res = {
+            'scores': self.scores
+        }
+        await self.send(res)
+
+    async def resp_new_node(self, data):
+        await self.notify({
+           'op': 'add_node',
+            'node': data['node']
+        }, self.scores)
+
+
+
+
+
 
 
     def update_main_node(self):
