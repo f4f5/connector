@@ -13,18 +13,18 @@ class Stream:
         self.writer.write_eof()        
         self.writer.close()
 
-class ServerStream(Stream):
-    def __init__(self, reader=None, writer=None):
-        pass
+# class ServerStream(Stream):
+#     def __init__(self, reader=None, writer=None):
+#         pass
 
-    async def handler(self, reader=None, writer=None):
-        self.reader = reader
-        self.writer = writer    
-        data = await self.reader.read()
-        message = data.decode()
-        addr = self.writer.get_extra_info('peername')
+#     async def handler(self, reader=None, writer=None):
+#         self.reader = reader
+#         self.writer = writer    
+#         data = await self.reader.read()
+#         message = data.decode()
+#         addr = self.writer.get_extra_info('peername')
 
-        print(f"Received {message!r} from {addr!r}")   
+#         print(f"Received {message!r} from {addr!r}")   
 
 
 class ClientStream(Stream):
@@ -36,5 +36,3 @@ class ClientStream(Stream):
             ip, port = ip.split(':')
         self.reader, self.writer = await asyncio.open_connection(ip, port)
 
-    
-server = ServerStream()

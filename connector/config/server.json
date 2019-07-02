@@ -1,6 +1,6 @@
 {
     "server_type": "wjakj",
-    "port": [1312],
+    "port": 1312,
     "ip": "193.2.21.111",
     "location": [123, 231],
     "remain_connection": 321

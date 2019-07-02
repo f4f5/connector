@@ -4,6 +4,7 @@ command line relate operation
 
 import sys
 import asyncio
+from node import Node
 
 if sys.platform == 'win32':
     loop = asyncio.ProactorEventLoop()
@@ -12,29 +13,21 @@ else:
     
 asyncio.set_event_loop(loop)
 
-async def handle_echo(reader, writer):
-    data = await reader.read(100)
-    message = data.decode()
-    addr = writer.get_extra_info('peername')
-
-    print(f"Received {message!r} from {addr!r}")
-
-    print(f"Send: {message!r}")
-    writer.write(data)
-    await writer.drain()
-
-    print("Close the connection")
-    writer.close()
-
+ip = ''
+port = 0
+with open('./config/server.json', encoding = 'utf8') as f:
+    serverConfig = json.loads(f.read())
+    ip = serverConfig.get('ip')
+    port = serverConfig.get('port')
 
 async def main():
+    node = Node()
     server = await asyncio.start_server(
-        handle_echo, '127.0.0.1', 8888)
+        node.server, ip, port)
 
     addr = server.sockets[0].getsockname()
     print(f'Serving on {addr}')
 
     async with server:
         await server.serve_forever()
-
 asyncio.run(main())

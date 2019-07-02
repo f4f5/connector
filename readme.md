@@ -42,12 +42,12 @@ Union系统是一整套的软件。通过它可以连接世界各地的电脑，
 连接器是一个独立的进程，它将帮助更新和维护资源定位表，并帮助调度客户端的连接。资源定位表包含Union中每个服务器的所有信息。因为整个网络是动态的，所以这个文件也会随时间变化。连接器将帮助进行资源定位表的增、删、改、查。资源定位表将按IP、服务器类型、端口、剩余连接、位置等描述服务器。资源定位表内容如下：
 
 ```
-resource_main:    //主资源文件
+resource_mains:    //主资源文件
 {
     ip_x: {
+        ip:
         server_type: []
-        ports:[]
-        remainconnections: []
+        remain_connections: []
         score:
         location:
     }    
@@ -61,7 +61,7 @@ locations:   //下面的数据结构帮助更快的搜索资源
 
 scores: [1st ip, 2ed ip, 3rd ip, 4th ip, ...]  //前100个性能最好的主机
 
-server_type:
+server_types:
 {
     type_x: [ip_x]
 }
@@ -70,7 +70,8 @@ remainconnections:{
     unremain: [],
     remain10: [],
     remain100: [],
-    remain1000: []
+    remain1000: [],
+    remain10000: [],
     unlimit: []
 }
 

@@ -3,6 +3,7 @@ node logic
 author: kdsjkjgaksdgjqawe@outlook.com
 """
 from ping import PyPing
+import asyncio
 import psutil
 import util
 from multiprocessing import Pool
@@ -14,6 +15,7 @@ import local
 from netio import ClientStream
 from netio import server
 
+
 class Node:
     def __init__(self):
         self.resource_mains = {}
@@ -21,6 +23,9 @@ class Node:
         self.server_types = {}
         self.remain_connections = {}
         self.scores = []   #ips 
+        self.childs = []
+        self.heart_beat = 1000
+        self.last_beat = 0
         self.load_config()
         self.pingter = PyPing()
         self.ismainnode = False
@@ -33,14 +38,19 @@ class Node:
             serverConfig = json.loads(f.read())
             self.server_type = serverConfig.get('server_type') 
             self.ip = serverConfig.get('ip') 
-            self.location = serverConfig.get('locations')            
-            self.remain_connection = serverConfig.get('remain_connection')
+            self.location = serverConfig.get('location')            
+            self.remain_connections = serverConfig.get('remain_connections')
             self.score = serverConfig.get('score')
             self.pc = local.parse_pc_str(serverConfig.get('pc'))
             self.build_self_node()
 
     def build_self_node(self):
         self.node = {}
+        self.node['ip'] = self.ip
+        self.node['remain_connections'] = self.remain_connection
+        self.node['location'] = self.location
+        self.node['score'] = self.score
+        self.node['sever_type'] = self.server_type
         pass
 
     async def connect_2_network(self, url):
@@ -62,7 +72,8 @@ class Node:
         self.scores = js.scores
 
         if len(self.scores) < 100:            
-            rs = await self.req_resource_file(random.choice(self.scores))            
+            rs = await self.req_resource_file(random.choice(self.scores))  
+            self.node['father'] = self.ip          
             self.resource_mains = rs.resource_mains
             self.locations = rs.locations
             self.server_types = rs.server_types
@@ -119,7 +130,7 @@ class Node:
         return best
     
 
-    async def main_node_server(self):
+    async def main_node_server(self, reader, writer):
         """
         Server as a main node to receive and process message. This function can be thought
         to be controller in MVC moudel. 
@@ -127,23 +138,27 @@ class Node:
         ---------
         节点为主节点时的服务器，该函数有点像MVC模型里的控制器
         """
-        data = await self.sever.reader.read()
+        data = await reader.read()
+        data = data.decode()
+        data = json.loads(data)        
+        addr = writer.get_extra_info('peername')
+        print(f"Received {message!r} from {addr!r}")
+        print(f"Send: {message!r}")
         resp = {
             'get_main_node':        self.resp_main_node,
-            'new_node':             self.resp_new_node,
-            'new_main_node':        self.resp_new_main_node,
+            'new_node':             self.resp_new_node,            'new_main_node':        self.resp_new_main_node,
             'get_resource_file':    self.resp_resource_file,  #just response the resource file
-            'main_node_fail':       self.resp_main_node_fail,    #just receive the info and do something
-            '_main_node_fail':      self.main_node_fail_process,  #indicate the first main node to langch a main_node_fail info.
-            'delete_node':          self.delete_node,
-            'add_node':             self.add_node,
+            'delete_main_node':     self.resp_main_node_fail,    #just receive the info and do something
+            'delete_node':          self.resp_delete_node,
+            'add_node':             self.resp_add_node,
             'search_node':          self.search_node,
             'update_node':          self.update_node,
-            'recieve_new_node':     self.recieve_new_node
+            'heart_beat':           self.resp_heart_beat
         }
+        resp.get(data['op'])(data, reader, writer)        
         pass    
     
-    async def node_server(self):
+    async def node_server(self, reader, writer):
         """
         Server as a normal node to receive and process message. This function can be thought 
         to be controller in MVC moudel.
@@ -151,15 +166,22 @@ class Node:
         ---------
         节点为常规节点时的服务器，该函数有点像MVC模型里的控制器
         """
-        data = await self.sever.reader.read()
+        data = await reader.read()
+        data = data.decode()
+        data = json.loads(data)        
+        addr = writer.get_extra_info('peername')
+        print(f"Received {message!r} from {addr!r}")
+        print(f"Send: {message!r}")
         resp = {
             'get_main_node':        self.get_main_node,
             'change_main_node':     self.change_main_node,
             'delete_node':          self.delete_node,
             'add_node':             self.add_node,
             'search_node':          self.search_node,
-            'update_node':          self.update_node
+            'update_node':          self.update_node,
+            'heart_beat':           self.resp_heart_beat
         }
+        resp.get(data['op'])(data, reader, writer)        
         pass
     
 
@@ -201,23 +223,29 @@ class Node:
         """
         as a server to handle request
         """
+        
+        if self.ismainnode:
+            self.main_node_server(reader, writer)
+        else:
+            self.node_server(reader, writer)    
 
-    async def send(self, data):         
+        await writer.drain()
+        writer.write_eof()        
+        print("Close the connection")
+        writer.close()
+
+    async def send(self, data, reader, writer):         
         """
         as a server node to send info
         """
-        addr = self.server.writer.get_extra_info('peername')
+        addr = writer.get_extra_info('peername')
         if type(data) is not type(''):
             data = json.dumps(data)
 
         print(f"Received {data!r} from {addr!r}")
         print(f"Send: {data!r}")
-        self.server.writer.write(data)
-        await self.server.writer.drain()
-        self.server.writer.write_eof()        
-        print("Close the connection")
-        self.server.writer.close()
-
+        writer.write(data)
+        
 
     ########################################
     async def req_resource_file(self,url=None):
@@ -226,65 +254,94 @@ class Node:
         }
         return await self.requests(data, url)
 
-    async def resp_main_node(self):
+    async def resp_main_node(self, data, reader, writer):
         res = {
             'scores': self.scores
         }
-        await self.send(res)
+        await self.send(res, reader, writer)
 
-    async def resp_new_node(self, data):
+    async def resp_new_node(self, data, reader, writer):
+        util.opush(self.childs, data.ip)
         await self.notify({
            'op': 'add_node',
-            'node': data['node']
+            'node': data
+        }, self.scores)
+    
+    async def resp_new_main_node(self, data, reader, writer):
+        await self.notify({
+           'op': 'add_node',
+            'node': data
         }, self.scores)
 
-
-
-
-
-
-
-    def update_main_node(self):
-        """SEND INFO
-
-        exchange infomation from other main node.
-        ——————————
-        若为主节点身份 对网络做出更新（发送更新信息）
-        """
-
-        pass
-
-    def update_node(self):
-        """SEND INFO
-
-        """
+    async def resp_add_node(self, data, reader, writer):
+        if not self.server_types.get(data['server_type']):
+            self.server_types[data['server_type']] = []
+        util.opush(self.server_types[data['server_type']], data.ip)
+        if not self.locations.get(data['location']):
+            self.locations[data['location']] = []
+        util.opush(self.locations[data['location']], data.ip)
+        rem = ''
+        re = int(data['remain_connection'])
+        if re >= 0 and re < 100:
+            rem = '10'
+        elif re >= 100 and re < 1000:
+            rem = '100'
+        elif re >= 1000 and re < 10000:
+            rem = '1000'
+        elif re >= 10000 and re < 100000:
+            rem = '10000'
+        elif re > 100000:
+            rem = 'unlimit'
+        else:
+            rem = 'unremain'
+        if rem.startswith('1'):
+            rem = 'remain' + rem                        
+        util.opush(self.remain_connections[rem], data.ip)
+        self.resource_mains[data.ip] = data
         if self.ismainnode:
-            return self.update_main_node()
+            await self.notify({
+                'op': 'add_node',
+                    'node': data
+                }, self.childs)
+
+    async def resp_heart_beat(self, data, reader, writer):
+        await self.send('1', reader, writer)
+
+    async def resp_delete_main_node(self,data, reader, writer):
+        # reselect the 100s
 
         pass
+
     
-    def periodic_do(self):
-        self.update_node()
-        self.check_child_heartbeat()
+    async def periodic_do(self):
+        self.last_beat = int(time.time())
+        if self.ismainnode:
+            await self.check_main_heartbeat()
+        else:
+            await self.check_child_heartbeat()
+        pass 
 
-        pass
+    async def check_child_heartbeat(self):
+        for child in self.childs:
+            data = await self.requests({'op': 'check_hearbet'}, child)
+            if str(data) is not '1':
+                await asyncio.sleep(10)
+                data = await self.requests({'op': 'check_hearbet'}, child)
+                if str(data) is not '1':
+                    await self.notify({'op': 'delete_node', 'node': child}, self.scores)
 
-    def check_child_heartbeat(self):
-        if not ismainnode:
-            return
-
-        pass
-
-    def delete_main_node(self):
-
-        pass
-    def delete_node(self):
-        pass
-
-    def select_new_main_node(self):
-        """
-        1 if ismainnode, select the best node of its child and send info to all the other mainnode
-        
-        """
-        pass
-            
+    async def check_main_heartbeat(self):
+        data = await self.requests({'op': 'check_hearbet'}, self.mainnode)
+        if str(data) is not '1':
+            await asyncio.sleep(12)
+            data = await self.requests({'op': 'check_hearbet'}, self.mainnode)
+            if str(data) is not '1':
+                self.scores.remove(self.mainnode)
+                await self.notify({'op': 'delete_main_node', 'node': self.mainnode}, self.scores)
+                if self.last_beat and int(time.time()) - last_beat > self.heart_beat*2:
+                    self.connect_2_network(random.choice(self.scores))
+                else:
+                    self.scores = await self.requests({'op':'get_main_node'}, url)
+                    mainnode =self.choose_best_mainnode()
+                    self.node['father'] = mainnode
+                    self.mainnode = mainnode                    
