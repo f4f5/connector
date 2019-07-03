@@ -153,7 +153,8 @@ class Node:
             'add_node':             self.resp_add_node,
             'search_node':          self.search_node,
             'update_node':          self.update_node,
-            'heart_beat':           self.resp_heart_beat
+            'heart_beat':           self.resp_heart_beat,
+            'set_main_node':        self.resp_set_main_node
         }
         resp.get(data['op'])(data, reader, writer)        
         pass    
@@ -179,7 +180,8 @@ class Node:
             'add_node':             self.add_node,
             'search_node':          self.search_node,
             'update_node':          self.update_node,
-            'heart_beat':           self.resp_heart_beat
+            'heart_beat':           self.resp_heart_beat,
+            'set_main_node':        self.resp_set_main_node
         }
         resp.get(data['op'])(data, reader, writer)        
         pass
@@ -247,6 +249,58 @@ class Node:
         writer.write(data)
         
 
+    def set_node(self, data):
+        if not self.server_types.get(data['server_type']):
+            self.server_types[data['server_type']] = []
+        util.opush(self.server_types[data['server_type']], data.ip)
+        if not self.locations.get(data['location']):
+            self.locations[data['location']] = []
+        util.opush(self.locations[data['location']], data.ip)
+        rem = ''
+        re = int(data['remain_connection'])
+        if re >= 0 and re < 100:
+            rem = '10'
+        elif re >= 100 and re < 1000:
+            rem = '100'
+        elif re >= 1000 and re < 10000:
+            rem = '1000'
+        elif re >= 10000 and re < 100000:
+            rem = '10000'
+        elif re > 100000:
+            rem = 'unlimit'
+        else:
+            rem = 'unremain'
+        if rem.startswith('1'):
+            rem = 'remain' + rem                        
+        util.opush(self.remain_connections[rem], data.ip)
+        self.resource_mains[data.ip] = data
+        pass
+
+    def unset_node(self, data):
+        ip = data['ip']
+        self.server_types[data['server_type']].remove(ip)
+        self.locations[data['location']].remove(ip)
+        rem = ''
+        re = int(data['remain_connection'])
+        if re >= 0 and re < 100:
+            rem = '10'
+        elif re >= 100 and re < 1000:
+            rem = '100'
+        elif re >= 1000 and re < 10000:
+            rem = '1000'
+        elif re >= 10000 and re < 100000:
+            rem = '10000'
+        elif re > 100000:
+            rem = 'unlimit'
+        else:
+            rem = 'unremain'
+        if rem.startswith('1'):
+            rem = 'remain' + rem  
+        self.remain_connections[rem].remove(ip)
+        del self.resource_mains[ip]
+
+
+
     ########################################
     async def req_resource_file(self,url=None):
         data = {
@@ -261,6 +315,7 @@ class Node:
         await self.send(res, reader, writer)
 
     async def resp_new_node(self, data, reader, writer):
+        self.set_node(data)
         util.opush(self.childs, data.ip)
         await self.notify({
            'op': 'add_node',
@@ -307,10 +362,27 @@ class Node:
     async def resp_heart_beat(self, data, reader, writer):
         await self.send('1', reader, writer)
 
-    async def resp_delete_main_node(self,data, reader, writer):
-        # reselect the 100s
+    async def resp_delete_main_node(self, data, reader, writer):        
+        self.scores.remove(data['node']['ip'])
+        self.unset_node(data)
+        if self.ip == self.scores[0]:
+            keys = list(self.resource_mains.keys())
+            random.shuffle(keys)
+            if len(keys) >5000:
+                keys = keys[:5000]
+            scores = sorted(keys, key= lambda x:self.resource_mains[x]['score'])
+            mainnode = ''
+            for k in scores:
+                if self.scores.count(k) == 0:
+                    mainnode = k
+                    break
+            self.scores.push(mainnode)
+            await self.notify({'op': 'set_main_node', 'ip': mainnode}, self.scores)
 
-        pass
+            # reselect the 100s
+        if self.ismainnode:
+            await self.notify({'op': ' delete_node', 'node': data}, self.childs)
+
 
     
     async def periodic_do(self):
