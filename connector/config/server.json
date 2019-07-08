@@ -1,7 +1,10 @@
 {
     "server_type": "wjakj",
-    "port": 1312,
-    "ip": "193.2.21.111",
+    "con_port": 1326,
+    "api_port": 2102,
+    "ip": "0.0.0.0",
     "location": [123, 231],
-    "remain_connection": 321
+    "remain_connections": 321,
+    "score": 321,
+    "pc": "122_34_435_32_34_35"
 }
