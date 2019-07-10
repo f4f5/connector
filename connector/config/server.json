@@ -4,7 +4,7 @@
     "api_port": 2102,
     "ip": "0.0.0.0",
     "location": [123, 231],
-    "remain_connections": 321,
+    "remain_connection": 321,
     "score": 321,
     "pc": "122_34_435_32_34_35"
 }

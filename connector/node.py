@@ -2,6 +2,7 @@
 node logic
 author: kdsjkjgaksdgjqawe@outlook.com
 """
+import sys
 from ping import PyPing
 import asyncio
 import psutil
@@ -14,6 +15,7 @@ import json
 import local
 from netio import ClientStream
 
+__LINE__ = sys._getframe
 
 class Node:
     def __init__(self):
@@ -41,7 +43,7 @@ class Node:
             self.api_ip = self.ip + str(self.api_port)
             self.con_ip = self.ip + str(self.con_port)
             self.location = serverConfig.get('location')            
-            self.remain_connections = serverConfig.get('remain_connections')
+            self.remain_connection = serverConfig.get('remain_connection')
             self.score = serverConfig.get('score')
             self.pc = local.parse_pc_str(serverConfig.get('pc'))
             self.build_self_node()
@@ -50,7 +52,7 @@ class Node:
         self.node = {}
         self.node['con_ip'] = self.con_ip
         self.node['api_ip'] = self.api_ip
-        self.node['remain_connections'] = self.remain_connections
+        self.node['remain_connection'] = self.remain_connection
         self.node['location'] = self.location
         self.node['score'] = self.score
         self.node['sever_type'] = self.server_type
@@ -72,16 +74,16 @@ class Node:
             print(e)
             return
 
-        self.scores = js.scores
+        self.scores = js['scores']
 
-        if len(self.scores) < 100:            
+        if len(self.scores) < 100 and len(self.scores)>=1:            
             rs = await self.req_resource_file(random.choice(self.scores))  
             self.node['father'] = self.con_ip          
-            self.resource_mains = rs.resource_mains
-            self.locations = rs.locations
-            self.server_types = rs.server_types
-            self.remain_connections = rs.remain_connections
-            self.scores = rs.scores
+            self.resource_mains = rs['resource_mains']
+            self.locations = rs['locations']
+            self.server_types = rs['server_types']
+            self.remain_connections = rs['remain_connections']
+            self.scores = rs['scores']
             self.ismainnode = True   # indicate the server will be main node server.
             util.opush(self.scores,self.con_ip)
             await self.notify({
@@ -89,6 +91,10 @@ class Node:
                     'node': self.node
                 }, self.scores)
             return
+        elif len(self.scores) == 0:
+            self.node['father'] = self.con_ip
+            self.ismainnode = True   # indicate the server will be main node server.
+            util.opush(self.scores,self.con_ip)          
         else:
             mainnode = self.choose_best_mainnode()
             self.node['father'] = mainnode
@@ -145,7 +151,7 @@ class Node:
         data = data.decode()
         data = json.loads(data)        
         addr = writer.get_extra_info('peername')
-        print(f"Received {data!r} from {addr!r}")
+        print(__LINE__().f_lineno,f"Received {data!r} from {addr!r}")
         print(f"Send: {data!r}")
         resp = {
             'get_main_node':        self.resp_main_node,
@@ -161,11 +167,11 @@ class Node:
             'set_main_node':        self.resp_set_main_node,
             
         }
-        print('gonna request to main server: ',data['op'])
+        print('resp as  main server: ',data['op'])
         if data['op'] and resp.get(data['op']):
             await resp.get(data['op'])(data, reader, writer) 
         else:
-            print('request fail to main server: ',data['op'])       
+            print(__LINE__().f_lineno,'resp fail as  main server: ',data['op'])       
         pass    
     
     async def node_server(self, reader, writer):
@@ -180,11 +186,12 @@ class Node:
         data = data.decode()
         data = json.loads(data)        
         addr = writer.get_extra_info('peername')
-        print(f"Received {data!r} from {addr!r}")
-        print(f"Send: {data!r}")
+        print(__LINE__().f_lineno,f"Received {data!r} from {addr!r}")
+        # print(__LINE__().f_lineno,f"Send: {data!r}")
         resp = {
             'get_main_node':        self.resp_main_node,
             'delete_node':          self.resp_delete_node,
+            'get_resource_file':    self.resp_resource_file,  #just response the resource file
             'delete_main_node':     self.data,   
             'add_node':             self.resp_add_node,
             # 'search_node':          self.search_node,
@@ -192,11 +199,11 @@ class Node:
             'heart_beat':           self.resp_heart_beat,
             'set_main_node':        self.resp_set_main_node
         }
-        print('gonna request to normal server: ',data['op'])
+        print('resp as normal server: ',data['op'])
         if data['op'] and resp.get(data['op']):
             await resp.get(data['op'])(data, reader, writer) 
         else:
-            print('request fail to normal server: ',data['op'])       
+            print('resp fail as normal server: ',data['op'])       
         pass
     
 
@@ -231,9 +238,11 @@ class Node:
         self.client.writer.write(data)
         await self.client.writer.drain()
         self.client.writer.write_eof()
+        print(__LINE__().f_lineno,'client send info succeed: ',data)
         data = await self.client.reader.read()
         data = json.loads(data.decode()) 
-        await self.client.writer.close()
+        self.client.writer.close()
+        print(__LINE__().f_lineno,'client receive info succeed: ',data)
         return data
     
     async def server(self, reader, writer):
@@ -248,7 +257,7 @@ class Node:
 
         await writer.drain()
         writer.write_eof()        
-        print("Close the connection")
+        print(__LINE__().f_lineno,"Close the connection")
         writer.close()
 
     async def send(self, data, reader, writer):         
@@ -258,9 +267,7 @@ class Node:
         addr = writer.get_extra_info('peername')
         if type(data) is not type(''):
             data = json.dumps(data)
-
-        print(f"Received {data!r} from {addr!r}")
-        print(f"Send: {data!r}")        
+        print(__LINE__().f_lineno,f"Send: {data!r}")        
         writer.write(data.encode())
         
 
@@ -314,8 +321,6 @@ class Node:
         self.remain_connections[rem].remove(ip)
         del self.resource_mains[ip]
 
-
-
     ########################################
     async def req_resource_file(self,url=None):
         data = {
@@ -323,7 +328,21 @@ class Node:
         }
         return await self.requests(data, url)
 
+
+
+    #########################################
+
+    async def resp_resource_file(self, data, reader, writer):
+        await self.send({
+            'resource_mains': self.resource_mains,
+            'locations': self.locations,
+            'server_types': self.server_types,
+            'remain_connections': self.remain_connections,
+            'scores': self.scores
+        },reader, writer)
+
     async def resp_main_node(self, data, reader, writer):
+        print(__LINE__().f_lineno, 'resp get_main_node')
         res = {
             'scores': self.scores
         }
@@ -410,8 +429,6 @@ class Node:
     async def resp_delete_node(self, data, reader, writer):
         self.unset_node(data)
 
-
-    
     async def periodic_do(self):
         self.last_beat = int(time.time())
         if self.ismainnode:
