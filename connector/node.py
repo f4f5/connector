@@ -14,6 +14,7 @@ import random
 import json
 import local
 from netio import ClientStream
+import xmlrpc.client
 
 __LINE__ = sys._getframe
 
@@ -158,13 +159,16 @@ class Node:
             'new_node':             self.resp_new_node,
             'new_main_node':        self.resp_new_main_node,
             'get_resource_file':    self.resp_resource_file,  #just response the resource file
-            'delete_main_node':     self.data,    
+            'delete_main_node':     self.resp_delete_main_node,    
             'delete_node':          self.resp_delete_node,
             'add_node':             self.resp_add_node,
             # 'search_node':          self.search_node,
             # 'update_node':          self.update_node,
             'heart_beat':           self.resp_heart_beat,
             'set_main_node':        self.resp_set_main_node,
+            'api':                  self.resp_api,
+            'receive_connection':   self.api_receive_connection,
+            'increase_connection':  self.resp_increase_connection
             
         }
         print('resp as  main server: ',data['op'])
@@ -192,12 +196,15 @@ class Node:
             'get_main_node':        self.resp_main_node,
             'delete_node':          self.resp_delete_node,
             'get_resource_file':    self.resp_resource_file,  #just response the resource file
-            'delete_main_node':     self.data,   
+            'delete_main_node':     self.resp_delete_main_node,   
             'add_node':             self.resp_add_node,
             # 'search_node':          self.search_node,
             # 'update_node':          self.update_node,
             'heart_beat':           self.resp_heart_beat,
-            'set_main_node':        self.resp_set_main_node
+            'set_main_node':        self.resp_set_main_node,
+            'api':                  self.resp_api,
+            'receive_connection':   self.api_receive_connection,
+            'increase_connection':  self.resp_increase_connection
         }
         print('resp as normal server: ',data['op'])
         if data['op'] and resp.get(data['op']):
@@ -304,7 +311,12 @@ class Node:
         self.locations[data['location']].remove(ip)
         rem = ''
         re = int(data['remain_connection'])
-        if re >= 0 and re < 100:
+        rem = self._get_connection_level(re) 
+        self.remain_connections[rem].remove(ip)
+        del self.resource_mains[ip]
+
+    def _get_connection_level(re):
+        if re >= 1 and re < 100:
             rem = '10'
         elif re >= 100 and re < 1000:
             rem = '100'
@@ -318,8 +330,48 @@ class Node:
             rem = 'unremain'
         if rem.startswith('1'):
             rem = 'remain' + rem  
+        return rem
+
+    def increase_connection(self, ip=Node):
+        if not ip:
+            ip = self.con_ip
+        if self.resource_mains.get(ip):
+            self.resource_mains[ip]['remain_connection'] -=1
+        else:
+            return False
+        rem = ''
+        re = int(self.resource_mains[ip]['remain_connection'])
+        rem = self._get_connection_level(re)
+        pre_rem = self._get_connection_level(re+1)
+        if rem == pre_rem:
+            return True
+        else:
+            self.remain_connections[pre_rem].remove(ip)
+            util.opush(self.remain_connections[rem], ip)
+            return True
+
+    def decrease_connection(self, ip=Node):
+        if not ip:
+            ip = self.con_ip
+        if self.resource_mains.get(ip):
+            self.resource_mains[ip]['remain_connection'] +=1
+        else:
+            return False
+        rem = ''
+        re = int(self.resource_mains[ip]['remain_connection'])
+        rem = self._get_connection_level(re-1)        
         self.remain_connections[rem].remove(ip)
-        del self.resource_mains[ip]
+        return True
+
+    def update_connection(self, ip, conn):
+        rem = ''
+        re = int(self.resource_mains[ip]['remain_connection'])
+        rem = self._get_connection_level(conn)
+        pre_rem = self._get_connection_level(re)
+        self.resource_mains[ip]['remain_connection'] = conn
+        if rem != pre_rem:            
+            self.remain_connections[pre_rem].remove(ip)
+            util.opush(self.remain_connections[rem], ip)
 
     ########################################
     async def req_resource_file(self,url=None):
@@ -405,7 +457,7 @@ class Node:
     async def resp_heart_beat(self, data, reader, writer):
         await self.send('1', reader, writer)
 
-    async def data(self, data, reader, writer):        
+    async def resp_delete_main_node(self, data, reader, writer):        
         self.scores.remove(data['node']['ip'])
         self.unset_node(data)
         if self.con_ip == self.scores[0]:
@@ -429,12 +481,72 @@ class Node:
     async def resp_delete_node(self, data, reader, writer):
         self.unset_node(data)
 
+    async def resp_api(self, data, reader, writer):
+        """
+        response client request for api 
+        Args:
+        --
+        data:  { op: , server_type : , geolocation:}
+
+        Return:
+        --
+        the best server ip.
+        """
+        candidate = ''
+        candidate0 = self.server_types.get(data.get('server_type'))
+        candidate1 = self.server_types.get(data.get('geolocation'))
+        if candidate0 and candidate1:
+            l = list(set(candidate0).intersection(set(candidate1)))
+            if len(l) <=0:
+                candidate = candidate0
+            else:
+                candidate = l
+        if candidate and len(candidate)<=0:
+            return await self.send({}, reader, writer)
+
+        if len(candidate) ==1:
+            return await self.send(self.resource_mains[candidate[0]], reader, writer)
+        random.shuffle(candidate)
+        best = candidate[0]
+        count = 0
+        for ser in candidate:
+            if(self.resource_mains[best].remain_connection < self.resource_mains[ser].remain_connection):
+                best = ser
+                count =+1
+                if count > 20:
+                    break
+
+        await self.send(self.resource_mains[best], reader, writer)
+
+
+
+    async def api_receive_connection(self, data, reader, writer):
+        """
+        this computer gonna receive connection from clients
+        this function help to validate the connection and update current node
+        args:
+        ---
+        data: {'reference': , server_type : , geolocation: }
+        """                   
+        checked = await self.requests({'op': 'validate_connection', 'server_type' : data['server_type'], 'geolocation': data['geolocation']}, data['reference'])     
+        if checked:
+            self.increase_connection()
+            await self.notify({'op':'increase_connection','con_ip': self.con_ip}, self.scores)
+
+    async def resp_increase_connection(self,data, reader, writer):
+        self.increase_connection(data['con_ip'])
+        if self.ismainnode:
+            await self.notify({'op':'increase_connection','con_ip': data['con_ip']}, self.childs)
+    
     async def periodic_do(self):
         self.last_beat = int(time.time())
         if self.ismainnode:
             await self.check_main_heartbeat()
         else:
             await self.check_child_heartbeat()
+        
+        conn = self.check_api_connection()
+        self.update_connection(self.con_ip, conn)
         pass 
 
     async def check_child_heartbeat(self):
@@ -462,3 +574,9 @@ class Node:
                     self.node['father'] = mainnode
                     self.mainnode = mainnode  
                       
+    def check_api_connection(self):
+        # with xmlrpc.client.ServerProxy("http://localhost:8000/") as proxy:
+        #     print("3 is even: %s" % str(proxy.is_even(3)))
+        #     print("100 is even: %s" % str(proxy.is_even(100)))
+        return 9
+        pass

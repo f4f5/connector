@@ -10,7 +10,7 @@ resource_main:    //the main resource file
 {
     ip_x: {
         server_type: []
-        remainconnections: 
+        remain_connection : 
         score:
         location:
         father:
@@ -30,7 +30,7 @@ server_type:
     type_x: [ip_x]
 }
 
-remainconnections:{
+remain_connections:{
     unremain: [],
     remain10: [],
     remain100: [],
@@ -96,6 +96,9 @@ mainnode exchange infomation if need
 
 Flows5: 
 delete An old Mainnode and select a new one.
+
+Flows6:
+remain_connections update. increase while the connection come, decrease while ..
 
 ## Client API
 ## Server API
