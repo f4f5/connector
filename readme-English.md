@@ -25,7 +25,7 @@ locations:   //below structure help to search faster
 
 scores: [1st ip, 2ed ip, 3rd ip, 4th ip, ...]  //the firt 100 ips
 
-server_type:
+server_types:
 {
     type_x: [ip_x]
 }

@@ -138,22 +138,27 @@ class Node:
                 best = ip
             
         return best
-    
 
-    async def main_node_server(self, reader, writer):
+    async def http_server(self, data, reader, writer):
+        method = data.split(' ')[0]
+        locate = data.split(' ')[1]
+        if method == 'GET' and locate.startswith('/get_server'):
+            ser_type = locate.split('/')[-1].strip('/')
+            res = str(self.get_servers(ser_type))
+            res=res[1:-1]
+            res=res.replace(', ','\n')
+            writer.write(res.encode())            
+        pass    
+
+    async def main_node_server(self, data, reader, writer):
         """
         Server as a main node to receive and process data. This function can be thought
         to be controller in MVC moudel. 
 
         ---------
         节点为主节点时的服务器，该函数有点像MVC模型里的控制器
-        """
-        data = await reader.read()
-        data = data.decode()
-        data = json.loads(data)        
-        addr = writer.get_extra_info('peername')
-        print(__LINE__().f_lineno,f"Received {data!r} from {addr!r}")
-        print(f"Send: {data!r}")
+        """        
+        
         resp = {
             'get_main_node':        self.resp_main_node,
             'new_node':             self.resp_new_node,
@@ -178,7 +183,7 @@ class Node:
             print(__LINE__().f_lineno,'resp fail as  main server: ',data['op'])       
         pass    
     
-    async def node_server(self, reader, writer):
+    async def node_server(self, data, reader, writer):
         """
         Server as a normal node to receive and process data. This function can be thought 
         to be controller in MVC moudel.
@@ -186,12 +191,7 @@ class Node:
         ---------
         节点为常规节点时的服务器，该函数有点像MVC模型里的控制器
         """
-        data = await reader.read()
-        data = data.decode()
-        data = json.loads(data)        
-        addr = writer.get_extra_info('peername')
-        print(__LINE__().f_lineno,f"Received {data!r} from {addr!r}")
-        # print(__LINE__().f_lineno,f"Send: {data!r}")
+        
         resp = {
             'get_main_node':        self.resp_main_node,
             'delete_node':          self.resp_delete_node,
@@ -256,11 +256,27 @@ class Node:
         """
         as a server to handle request
         """
-        
-        if self.ismainnode:
-            await self.main_node_server(reader, writer)
+        data = await reader.read()
+        data = data.decode()
+        tryhttp = False
+        if data[0] == '{':
+            try:
+                data = json.loads(data)  
+            except json.decoder.JSONDecodeError as es:
+                tryhttp = True
+                pass
         else:
-            await self.node_server(reader, writer)    
+            tryhttp=True                
+        addr = writer.get_extra_info('peername')
+        print(__LINE__().f_lineno,f"Received {data!r} from {addr!r}")
+        print(f"Send: {data!r}")
+
+        if tryhttp:
+            await self.http_server(data, reader, writer)
+        elif self.ismainnode:
+            await self.main_node_server(data, reader, writer)
+        else:
+            await self.node_server(data, reader, writer)    
 
         await writer.drain()
         writer.write_eof()        
@@ -314,6 +330,10 @@ class Node:
         rem = self._get_connection_level(re) 
         self.remain_connections[rem].remove(ip)
         del self.resource_mains[ip]
+
+    def get_servers(self, ser_type):
+        return self.server_types.get(ser_type)
+
 
     def _get_connection_level(re):
         if re >= 1 and re < 100:
@@ -575,6 +595,12 @@ class Node:
                     self.mainnode = mainnode  
                       
     def check_api_connection(self):
+        """
+        * only connect to local server.
+
+        this function help to check whether local server is available, and fetch
+        the remain connection.
+        """
         # with xmlrpc.client.ServerProxy("http://localhost:8000/") as proxy:
         #     print("3 is even: %s" % str(proxy.is_even(3)))
         #     print("100 is even: %s" % str(proxy.is_even(100)))
