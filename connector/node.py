@@ -144,9 +144,7 @@ class Node:
         locate = data.split(' ')[1]
         if method == 'GET' and locate.startswith('/get_server'):
             ser_type = locate.split('/')[-1].strip('/')
-            res = str(self.get_servers(ser_type))
-            res=res[1:-1]
-            res=res.replace(', ','\n')
+            res = str(self.get_servers(ser_type))            
             writer.write(res.encode())            
         pass    
 

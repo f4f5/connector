@@ -4,3 +4,5 @@
 * server.py  socket相关的逻辑
 * ping.py 实现ping
 * speedtest.py  对本机进行网络性能测试
+
+<a src="http://www.52im.net/thread-542-1-1.html">p2p hold</a>
